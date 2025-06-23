@@ -36,7 +36,7 @@ This project is an implementation of the classic Flappy Bird game, where an AI l
    To get started, clone this repository to your local machine:
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Shivighn/NEAT-Evolve
    cd Flappybird_AI
    ```
 
