@@ -59,7 +59,7 @@ function showStatus(data) {
   fields.elapsed.textContent = formatTime(clockState.elapsed);
   fields.alive.textContent = data.running ? "RUNNING" : "-";
   fields.status.textContent = data.status;
-  if (!player.active && data.best >= data.target && !data.running) {
+  if (!player.active && !webTimer.running && data.best >= data.target && !data.running) {
     document.querySelector("#learningLabel").textContent = "LEARNING COMPLETE";
     document.querySelector("#finalScore").textContent = data.best;
     document.querySelector("#completeOverlay").classList.remove("hidden");
@@ -75,8 +75,11 @@ function connectSocket() {
       showStatus(JSON.parse(event.data));
       return;
     }
-    if (previousFrameUrl) URL.revokeObjectURL(previousFrameUrl);
+    const oldFrameUrl = previousFrameUrl;
     previousFrameUrl = URL.createObjectURL(event.data);
+    gameStream.onload = () => {
+      if (oldFrameUrl) URL.revokeObjectURL(oldFrameUrl);
+    };
     gameStream.src = previousFrameUrl;
     gameStream.classList.add("visible");
     streamPlaceholder.classList.add("hidden");

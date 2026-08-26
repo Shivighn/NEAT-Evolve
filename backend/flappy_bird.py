@@ -20,6 +20,7 @@ ASSETS_DIR = os.path.join(FRONTEND_DIR, "imgs")
 
 WIN_WIDTH = 400
 WIN_HEIGHT = 600
+FRAME_STREAM_FPS = 20
 
 pipe_img = pygame.transform.scale2x(pygame.image.load(os.path.join(ASSETS_DIR,"pipe.png")))
 bg_img = pygame.transform.scale(pygame.image.load(os.path.join(ASSETS_DIR,"bg.png")), (600, 900))
@@ -37,6 +38,7 @@ target_reached = threading.Event()
 training_started_at = None
 latest_frame = None
 frame_version = 0
+render_counter = 0
 frame_condition = threading.Condition()
 websocket_loop = None
 
@@ -80,7 +82,7 @@ async def websocket_handler(request):
             if frame is not None and version != last_frame:
                 await websocket.send_bytes(frame)
                 last_frame = version
-            await asyncio.sleep(1 / 30)
+            await asyncio.sleep(1 / FRAME_STREAM_FPS)
 
     sender = asyncio.create_task(send_updates())
     try:
@@ -278,7 +280,7 @@ def blitRotateCenter(surf, image, topleft, angle):
     surf.blit(rotated_image, new_rect.topleft)
 
 def draw_window(win, birds, pipes, base, score):
-    global latest_frame, frame_version
+    global latest_frame, frame_version, render_counter
     win.blit(bg_img, (0,0))
 
     for pipe in pipes:
@@ -292,10 +294,13 @@ def draw_window(win, birds, pipes, base, score):
     for bird in birds:    
         bird.draw(win)
     pygame.display.update()
+    render_counter += 1
+    if render_counter % 2:
+        return
     pixels = pygame.image.tostring(win, "RGB")
     image = Image.frombytes("RGB", (WIN_WIDTH, WIN_HEIGHT), pixels)
     frame = io.BytesIO()
-    image.save(frame, "JPEG", quality=70, optimize=False)
+    image.save(frame, "JPEG", quality=60, optimize=False)
     with frame_condition:
         latest_frame = frame.getvalue()
         frame_version += 1
