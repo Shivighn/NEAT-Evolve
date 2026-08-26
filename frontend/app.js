@@ -12,6 +12,7 @@ const gameStream = document.querySelector("#gameStream");
 const streamPlaceholder = document.querySelector("#streamPlaceholder");
 const clockState = { elapsed: 0, running: false, receivedAt: performance.now() };
 const webTimer = { startedAt: 0, running: false };
+let awaitingTrainingStart = false;
 const playerCanvas = document.querySelector("#playerCanvas");
 const playerContext = playerCanvas.getContext("2d");
 const playerImages = {
@@ -42,6 +43,7 @@ function formatTime(seconds) {
 }
 
 function showStatus(data) {
+  if (awaitingTrainingStart && data.running) awaitingTrainingStart = false;
   fields.generation.textContent = data.generation;
   fields.best.textContent = data.best;
   fields.population.textContent = data.population;
@@ -50,7 +52,7 @@ function showStatus(data) {
   clockState.elapsed = data.elapsed;
   clockState.running = data.running;
   clockState.receivedAt = performance.now();
-  if (webTimer.running && (data.status === "TARGET BEATEN"
+  if (!awaitingTrainingStart && webTimer.running && (data.status === "TARGET BEATEN"
       || data.status === "RUN STOPPED"
       || (!data.running && data.status !== "READY TO TRAIN"))) {
     webTimer.running = false;
@@ -59,7 +61,8 @@ function showStatus(data) {
   fields.elapsed.textContent = formatTime(clockState.elapsed);
   fields.alive.textContent = data.running ? "RUNNING" : "-";
   fields.status.textContent = data.status;
-  if (!player.active && !webTimer.running && data.best >= data.target && !data.running) {
+  if (!awaitingTrainingStart && !player.active && !webTimer.running
+      && data.best >= data.target && !data.running) {
     document.querySelector("#learningLabel").textContent = "LEARNING COMPLETE";
     document.querySelector("#finalScore").textContent = data.best;
     document.querySelector("#completeOverlay").classList.remove("hidden");
@@ -228,6 +231,7 @@ async function startTraining(event) {
   document.querySelector("#outcomeMessage").textContent = "pipes cleared";
   webTimer.startedAt = performance.now();
   webTimer.running = true;
+  awaitingTrainingStart = true;
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify({ action: "start", target }));
   }
