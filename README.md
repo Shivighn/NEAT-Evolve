@@ -14,15 +14,25 @@ This project is an implementation of the classic Flappy Bird game, where an AI l
 
 
 2. **Add Game Assets:**
-   - Place the required images (`bird1.png`, `bird2.png`, `bird3.png`, `pipe.png`, `base.png`, `bg.png`) in an `imgs` folder in the project directory.
+   - The required images are stored in `frontend/imgs`.
 
    ```bash
-   python flappy_bird.py
+   python backend/flappy_bird.py
    ```
 
+   The Python process opens the original Pygame game and serves the website at
+   `http://localhost:8000`. Enter a target score in the website; the website
+   sends the target to Python and displays the score, generation, and cumulative
+   training time. The browser does not run a second game simulation.
+
 ## Files
-- `flappy_bird.py`: Main game and AI logic.
-- `config_feedforward.txt`: NEAT configuration file.
+- `backend/flappy_bird.py`: Main game, AI, API, and WebSocket logic.
+- `backend/routes/__init__.py`: HTTP route handlers and frontend file serving.
+- `backend/config_feedforward.txt`: NEAT configuration file.
+- `frontend/index.html`: Website markup.
+- `frontend/app.js`: Browser controls and display logic.
+- `frontend/style.css`: Website styling.
+- `frontend/imgs`: Game assets.
 - `.gitignore`: Standard Python and project ignores.
 
 
@@ -44,7 +54,7 @@ This project is an implementation of the classic Flappy Bird game, where an AI l
    After installing the requirements and adding the game assets, you can run the game with:
 
    ```bash
-   python flappy_bird.py
+   python backend/flappy_bird.py
    ```
 
 

@@ -1,0 +1,4 @@
+pygame
+neat-python
+websockets>=15,<16
+Pillow

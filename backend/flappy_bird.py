@@ -5,17 +5,103 @@ import os
 import time
 import neat
 import pickle
+import json
+import io
+import threading
+import asyncio
+import websockets
+from PIL import Image
+from http.server import ThreadingHTTPServer
+from routes import create_web_handler
 pygame.font.init()  # init font
+
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRONTEND_DIR = os.path.join(PROJECT_DIR, "frontend")
+ASSETS_DIR = os.path.join(FRONTEND_DIR, "imgs")
 
 WIN_WIDTH = 400
 WIN_HEIGHT = 600
 
-pipe_img = pygame.transform.scale2x(pygame.image.load(os.path.join("imgs","pipe.png")))
-bg_img = pygame.transform.scale(pygame.image.load(os.path.join("imgs","bg.png")), (600, 900))
-bird_images = [pygame.transform.scale(pygame.image.load(os.path.join("imgs","bird" + str(x) + ".png")),(40,30)) for x in range(1,4)]
-base_img = pygame.transform.scale2x(pygame.image.load(os.path.join("imgs","base.png")))
+pipe_img = pygame.transform.scale2x(pygame.image.load(os.path.join(ASSETS_DIR,"pipe.png")))
+bg_img = pygame.transform.scale(pygame.image.load(os.path.join(ASSETS_DIR,"bg.png")), (600, 900))
+bird_images = [pygame.transform.scale(pygame.image.load(os.path.join(ASSETS_DIR,"bird" + str(x) + ".png")),(40,30)) for x in range(1,4)]
+base_img = pygame.transform.scale2x(pygame.image.load(os.path.join(ASSETS_DIR,"base.png")))
 STAT_FONT = pygame.font.SysFont("comicsans", 50)
 
+training_state = {"running": False, "status": "READY TO TRAIN", "target": 10,
+                  "generation": 0, "score": 0, "best": 0, "elapsed": 0,
+                  "population": 0, "alive": 0, "average_fitness": 0,
+                  "best_fitness": 0}
+state_lock = threading.Lock()
+stop_requested = threading.Event()
+target_reached = threading.Event()
+training_started_at = None
+latest_frame = None
+frame_version = 0
+frame_condition = threading.Condition()
+websocket_loop = None
+
+
+def start_training(target):
+    global training_started_at
+    with state_lock:
+        training_state.update({"running": True, "status": "TRAINING IN PROGRESS",
+                               "target": target, "generation": 0,
+                               "score": 0, "best": 0, "elapsed": 0,
+                               "population": 0, "alive": 0,
+                               "average_fitness": 0, "best_fitness": 0})
+    stop_requested.clear()
+    target_reached.clear()
+    training_started_at = time.monotonic()
+    threading.Thread(target=run, args=(os.path.join(os.path.dirname(__file__),
+                              "config_feedforward.txt"),), daemon=True).start()
+
+
+async def websocket_handler(websocket):
+    async def send_updates():
+        last_frame = None
+        last_status_at = 0
+        while True:
+            now = time.monotonic()
+            if now - last_status_at >= 0.2:
+                with state_lock:
+                    payload = dict(training_state)
+                if payload["running"] and training_started_at:
+                    payload["elapsed"] = now - training_started_at
+                await websocket.send(json.dumps(payload))
+                last_status_at = now
+            with frame_condition:
+                frame = latest_frame
+                version = frame_version
+            if frame is not None and version != last_frame:
+                await websocket.send(frame)
+                last_frame = version
+            await asyncio.sleep(1 / 30)
+
+    sender = asyncio.create_task(send_updates())
+    try:
+        async for message in websocket:
+            request = json.loads(message)
+            if request.get("action") == "start":
+                start_training(max(1, int(request.get("target", 10))))
+            elif request.get("action") == "stop":
+                stop_requested.set()
+    finally:
+        sender.cancel()
+
+
+def start_websocket_server():
+    async def serve():
+        async with websockets.serve(websocket_handler, "0.0.0.0", 8765):
+            await asyncio.Future()
+    try:
+        asyncio.run(serve())
+    except OSError as error:
+        if error.errno not in (98, 10048) and getattr(error, "winerror", None) != 10048:
+            raise
+        print("WebSocket server already running on port 8765")
+
+# game sprites
 class Bird:
     # General variables
     MAX_ROTATION = 25
@@ -95,8 +181,9 @@ class Bird:
         return pygame.mask.from_surface(self.img)
 
 class Pipe:
-    GAP = 140
+    GAP = 150
     VEL = 5
+    VEL_UP = 2
 
     def __init__(self, x):
         # Initialising pipes
@@ -111,6 +198,7 @@ class Pipe:
         self.PIPE_BOTTOM = pipe_img
 
         self.passed = False
+        self.vertical_vel = self.VEL_UP
 
         self.set_height()
 
@@ -123,6 +211,12 @@ class Pipe:
     def move(self):
         # moving pipe
         self.x -= self.VEL
+        self.height += self.vertical_vel
+        if self.height <= 50 or self.height >= 300:
+            self.height = max(50, min(300, self.height))
+            self.vertical_vel *= -1
+        self.top = self.height - self.PIPE_TOP.get_height()
+        self.bottom = self.height + self.GAP
 
     def draw(self, win):
         # drawing pipes (Bottom and top)
@@ -171,6 +265,7 @@ class Base:
         win.blit(self.IMG, (self.x1, self.y))
         win.blit(self.IMG, (self.x2, self.y))
 
+# game orientations
 def blitRotateCenter(surf, image, topleft, angle):
     rotated_image = pygame.transform.rotate(image, angle)
     new_rect = rotated_image.get_rect(center = image.get_rect(topleft = topleft).center)
@@ -178,6 +273,7 @@ def blitRotateCenter(surf, image, topleft, angle):
     surf.blit(rotated_image, new_rect.topleft)
 
 def draw_window(win, birds, pipes, base, score):
+    global latest_frame, frame_version
     win.blit(bg_img, (0,0))
 
     for pipe in pipes:
@@ -191,8 +287,18 @@ def draw_window(win, birds, pipes, base, score):
     for bird in birds:    
         bird.draw(win)
     pygame.display.update()
+    pixels = pygame.image.tostring(win, "RGB")
+    image = Image.frombytes("RGB", (WIN_WIDTH, WIN_HEIGHT), pixels)
+    frame = io.BytesIO()
+    image.save(frame, "JPEG", quality=70, optimize=False)
+    with frame_condition:
+        latest_frame = frame.getvalue()
+        frame_version += 1
+        frame_condition.notify_all()
 
+# learning mechnaism
 def main(genomes,config):
+    global training_started_at
     nets = []
     ge =[]
     birds = []
@@ -211,6 +317,11 @@ def main(genomes,config):
 
     score = 0
     run = True
+    with state_lock:
+        training_state["generation"] += 1
+        training_state["score"] = 0
+        training_state["population"] = len(birds)
+        training_state["alive"] = len(birds)
     while run:
 
         clock.tick(30)
@@ -218,7 +329,7 @@ def main(genomes,config):
             if event.type == pygame.QUIT:
                 run = False
                 pygame.quit()
-                quit()
+                stop_requested.set()
 
         pipe_ind = 0
         if len(birds)>0:
@@ -265,6 +376,12 @@ def main(genomes,config):
             for g in ge:
                 g.fitness += 5
             pipes.append(Pipe(300))
+            with state_lock:
+                training_state["score"] = score
+                training_state["best"] = max(training_state["best"], score)
+            if score >= training_state["target"]:
+                target_reached.set()
+                run = False
 
         for r in rem:
             pipes.remove(r)
@@ -278,9 +395,20 @@ def main(genomes,config):
         base.move()
         draw_window(win, birds, pipes, base,score)
 
+        with state_lock:
+            fitness_values = [genome.fitness for genome in ge]
+            training_state["elapsed"] = time.monotonic() - training_started_at
+            training_state["alive"] = len(birds)
+            training_state["average_fitness"] = (sum(fitness_values) / len(fitness_values)
+                                                  if fitness_values else 0)
+            training_state["best_fitness"] = max(fitness_values, default=0)
+        if stop_requested.is_set() or target_reached.is_set():
+            run = False
+
 
 
 def run(config_path):
+    global training_started_at
     #loading configuration file
     config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
                             neat.DefaultSpeciesSet, neat.DefaultStagnation,
@@ -294,10 +422,27 @@ def run(config_path):
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
 
-    winner = p.run(main,30) #(fitness function,no of generations)
+    for _ in range(30):
+        if stop_requested.is_set() or target_reached.is_set():
+            break
+        p.run(main, 1)
+    with state_lock:
+        training_state["running"] = False
+        training_state["status"] = ("TARGET BEATEN" if target_reached.is_set()
+                                     else "RUN STOPPED")
 
 
 if __name__ == "__main__":
-    local_dir = os.path.dirname(__file__)
-    config_path = os.path.join(local_dir,"config_feedforward.txt")
-    run(config_path)
+    web_handler = create_web_handler(
+        FRONTEND_DIR, training_state, state_lock, stop_requested,
+        lambda: training_started_at, start_training,
+        lambda: latest_frame, frame_condition)
+    server = ThreadingHTTPServer(("localhost", 8000), web_handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=start_websocket_server, daemon=True).start()
+    print("Website: http://localhost:8000")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("Server stopped")
+        server.server_close()

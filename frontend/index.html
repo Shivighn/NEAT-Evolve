@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NEAT-Evolve</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar"><div class="brand"><span class="brand-mark">AI</span><span>NEAT-Evolve</span></div><div class="status-pill"><span class="status-dot"></span><span id="statusText">READY TO TRAIN</span></div></header>
+    <section id="setupView" class="setup-view">
+      <div class="intro-copy"><p class="eyebrow">NEAT-INSPIRED EVOLUTION SIMULATOR</p><h1>Give the bird<br><em>a mountain.</em></h1><p class="lede">Set the score your AI must beat. Its population will learn through generations while the clock measures the full training run.</p></div>
+      <form id="startForm" class="control-panel"><label for="targetScore">TARGET SCORE</label><div class="score-input"><input id="targetScore" type="number" min="1" max="500" value="10" required><span>pipes</span></div><button type="submit">START TRAINING <span>-></span></button><p class="hint">The simulation runs faster than real time so you can watch evolution happen.</p></form>
+      <div class="feature-row"><span><b>01</b> POPULATION EVOLUTION</span><span><b>02</b> VERTICAL PIPE DRIFT</span><span><b>03</b> CUMULATIVE TIME</span></div>
+    </section>
+    <section id="trainingView" class="training-view hidden">
+      <div class="training-heading"><div><p class="eyebrow">LIVE EVOLUTION</p><h2>Teaching the bird to fly.</h2></div><button id="stopButton" class="ghost-button" type="button">STOP RUN</button></div>
+      <div class="training-grid"><div class="canvas-wrap"><img id="gameStream" alt="Live Python Pygame game"><canvas id="playerCanvas" width="400" height="600" tabindex="0"></canvas><div class="python-window" id="streamPlaceholder"><strong>PYTHON / PYGAME</strong><span>Waiting for the Python game frame.</span><small>Start training to view the original game here.</small></div><div id="completeOverlay" class="complete-overlay hidden"><p class="eyebrow" id="outcomeTitle">TARGET BEATEN</p><strong id="finalScore">0</strong><span id="outcomeMessage">pipes cleared</span><button id="againButton" type="button">TRAIN AGAIN -></button><button id="beatButton" type="button">BEAT AI</button></div></div><aside class="stats-panel"><div class="target-card"><span>TARGET</span><strong id="targetDisplay">10</strong><small>pipes to beat</small></div><div class="stat-list"><div><span>BEST SCORE</span><strong id="bestScore">0</strong></div><div><span>GENERATION</span><strong id="generation">0</strong></div><div><span>POPULATION</span><strong id="population">0</strong></div><div><span>ALIVE NOW</span><strong id="aliveCount">0</strong></div><div><span>AVERAGE FITNESS</span><strong id="averageFitness">0.0</strong></div><div><span>TOP FITNESS</span><strong id="bestFitness">0.0</strong></div><div><span>ELAPSED TIME</span><strong id="elapsedTime">00:00.0</strong></div></div><div class="learning-note"><span class="pulse"></span><div><b id="learningLabel">EVOLVING</b><p>Top performers reproduce. New mutations test fresh flight paths.</p></div></div></aside></div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
