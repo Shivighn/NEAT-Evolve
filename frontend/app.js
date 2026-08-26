@@ -221,6 +221,10 @@ function animateClock() {
 async function startTraining(event) {
   event.preventDefault();
   const target = Math.max(1, Number(document.querySelector("#targetScore").value));
+  player.active = false;
+  playerCanvas.classList.remove("visible");
+  gameStream.classList.remove("visible");
+  streamPlaceholder.classList.remove("hidden");
   document.querySelector("#targetDisplay").textContent = target;
   document.querySelector("#setupView").classList.add("hidden");
   document.querySelector("#trainingView").classList.remove("hidden");
@@ -242,6 +246,8 @@ document.querySelector("#stopButton").addEventListener("click", () => {
   if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ action: "stop" }));
 });
 function returnToTrainingSetup() {
+  player.active = false;
+  playerCanvas.classList.remove("visible");
   document.querySelector("#trainingView").classList.add("hidden");
   document.querySelector("#setupView").classList.remove("hidden");
 }
