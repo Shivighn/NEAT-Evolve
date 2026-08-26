@@ -43,6 +43,9 @@ websocket_loop = None
 
 def start_training(target):
     global training_started_at
+    config_path = os.path.join(os.path.dirname(__file__), "config_feedforward.txt")
+    if not os.path.isfile(config_path):
+        raise FileNotFoundError(f"NEAT config not found: {config_path}")
     with state_lock:
         training_state.update({"running": True, "status": "TRAINING IN PROGRESS",
                                "target": target, "generation": 0,
@@ -52,8 +55,7 @@ def start_training(target):
     stop_requested.clear()
     target_reached.clear()
     training_started_at = time.monotonic()
-    threading.Thread(target=run, args=(os.path.join(os.path.dirname(__file__),
-                              "config_feedforward.txt"),), daemon=True).start()
+    threading.Thread(target=run, args=(config_path,), daemon=True).start()
 
 
 async def websocket_handler(request):

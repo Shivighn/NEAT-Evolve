@@ -76,5 +76,4 @@ Desktop.ini
 *.log
 
 # Ignore config or temp files
-config_feedforward.txt
 tempCodeRunnerFile.py 

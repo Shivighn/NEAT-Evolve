@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend ./backend
 COPY frontend ./frontend
+COPY backend/config_feedforward.txt ./backend/config_feedforward.txt
 
 EXPOSE 10000
 
