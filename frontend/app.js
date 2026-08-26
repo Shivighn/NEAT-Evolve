@@ -67,7 +67,8 @@ function showStatus(data) {
 }
 
 function connectSocket() {
-  socket = new WebSocket(`ws://${window.location.hostname}:8765`);
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
   socket.binaryType = "blob";
   socket.onmessage = (event) => {
     if (typeof event.data === "string") {

@@ -1,0 +1,10 @@
+services:
+  neat-evolve:
+    build: .
+    container_name: neat-evolve
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      SDL_VIDEODRIVER: dummy
+      PYTHONUNBUFFERED: 1

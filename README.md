@@ -13,7 +13,7 @@ Python HTTP server :8000
   |
   | WebSocket: commands, status JSON, binary game frames
   v
-Python WebSocket server :8765
+Python WebSocket endpoint `/ws` on the same service port
   |
   +--> Training thread
   |      +--> Pygame game loop
@@ -109,7 +109,7 @@ Contains the visual system, including CSS variables, responsive layout, overlays
 The local WebSocket endpoint is:
 
 ```text
-ws://localhost:8765
+ws://localhost:8000/ws
 ```
 
 The connection is bidirectional and remains open while the page is active.
@@ -298,7 +298,7 @@ Open:
 http://localhost:8000
 ```
 
-The Python process serves the frontend on port `8000` and the WebSocket server on port `8765`.
+The Python process serves the frontend and WebSocket endpoint through port `8000` locally, or Render's `PORT` in production.
 
 ## Deployment Notes
 
@@ -306,13 +306,11 @@ Render is more suitable than Vercel for this application because the backend is 
 
 Before production deployment:
 
-1. Bind HTTP to `0.0.0.0`.
+1. Bind the service to `0.0.0.0`.
 2. Use Render's `PORT` environment variable.
 3. Use headless Pygame with `SDL_VIDEODRIVER=dummy`.
-4. Serve HTTP and WebSockets through one public Render port, or place a reverse proxy in front of the two local listeners.
-5. Use `wss://` for secure production WebSockets.
-
-The current local configuration uses separate ports `8000` and `8765`, which is convenient for development but should be adapted before deployment.
+4. Use the `/ws` WebSocket endpoint on the same public port.
+5. Use `wss://` for secure production WebSockets; the frontend selects this automatically.
 
 ## Useful Commands
 
@@ -328,3 +326,72 @@ Check Git status:
 ```powershell
 git status
 ```
+
+## Docker Deployment
+
+The repository includes a `Dockerfile`, `.dockerignore`, and `render.yaml`.
+The container runs the Python backend, serves the frontend, and exposes the
+WebSocket endpoint through the same Render port.
+
+### Build locally
+
+Install and start Docker Desktop, then run these commands from the project root:
+
+```powershell
+docker build -t neat-evolve .
+docker run --rm -p 8000:8000 -e PORT=8000 neat-evolve
+```
+
+Open `http://localhost:8000`. The container uses headless Pygame, so the game
+is displayed in the browser rather than in a native desktop window.
+
+### Test the image
+
+In another terminal:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing http://localhost:8000/
+```
+
+Then open the page and test training, WebSocket updates, Pygame frames, and
+Beat AI mode.
+
+### Push Docker configuration to GitHub
+
+```powershell
+git add Dockerfile .dockerignore render.yaml README.md requirements.txt backend frontend
+git commit -m "Add Docker deployment configuration"
+git push origin main
+```
+
+### Deploy on Render
+
+1. Open Render and select **New > Blueprint** if using `render.yaml`, or select
+  **New > Web Service** manually.
+2. Connect the GitHub repository.
+3. For a manual service, choose **Docker** as the runtime.
+4. Leave the Dockerfile path as `./Dockerfile`.
+5. Leave the root directory at the repository root.
+6. Deploy the service.
+
+The service uses the `CMD` in the Dockerfile:
+
+```text
+python backend/flappy_bird.py
+```
+
+Render provides the `PORT` environment variable automatically. The backend
+binds to `0.0.0.0` and the frontend connects to `/ws` on the same public host.
+The browser therefore uses `wss://` automatically on the HTTPS Render URL.
+
+For a manual Render service, the equivalent settings are:
+
+```text
+Runtime: Docker
+Dockerfile Path: ./Dockerfile
+Docker Build Context Directory: .
+Health Check Path: /
+```
+
+You do not need to configure a separate frontend service or a separate
+WebSocket service.

@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: neat-evolve
+    runtime: docker
+    plan: free
+    healthCheckPath: /

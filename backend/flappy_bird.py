@@ -1,7 +1,8 @@
 import neat.config
-import pygame
 import random
 import os
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+import pygame
 import time
 import neat
 import pickle
@@ -9,10 +10,8 @@ import json
 import io
 import threading
 import asyncio
-import websockets
+from aiohttp import web
 from PIL import Image
-from http.server import ThreadingHTTPServer
-from routes import create_web_handler
 pygame.font.init()  # init font
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -57,7 +56,10 @@ def start_training(target):
                               "config_feedforward.txt"),), daemon=True).start()
 
 
-async def websocket_handler(websocket):
+async def websocket_handler(request):
+    websocket = web.WebSocketResponse()
+    await websocket.prepare(request)
+
     async def send_updates():
         last_frame = None
         last_status_at = 0
@@ -68,38 +70,39 @@ async def websocket_handler(websocket):
                     payload = dict(training_state)
                 if payload["running"] and training_started_at:
                     payload["elapsed"] = now - training_started_at
-                await websocket.send(json.dumps(payload))
+                await websocket.send_str(json.dumps(payload))
                 last_status_at = now
             with frame_condition:
                 frame = latest_frame
                 version = frame_version
             if frame is not None and version != last_frame:
-                await websocket.send(frame)
+                await websocket.send_bytes(frame)
                 last_frame = version
             await asyncio.sleep(1 / 30)
 
     sender = asyncio.create_task(send_updates())
     try:
         async for message in websocket:
-            request = json.loads(message)
+            if message.type == web.WSMsgType.TEXT:
+                request = json.loads(message.data)
+            else:
+                continue
             if request.get("action") == "start":
                 start_training(max(1, int(request.get("target", 10))))
             elif request.get("action") == "stop":
                 stop_requested.set()
     finally:
         sender.cancel()
+    return websocket
 
 
-def start_websocket_server():
-    async def serve():
-        async with websockets.serve(websocket_handler, "0.0.0.0", 8765):
-            await asyncio.Future()
-    try:
-        asyncio.run(serve())
-    except OSError as error:
-        if error.errno not in (98, 10048) and getattr(error, "winerror", None) != 10048:
-            raise
-        print("WebSocket server already running on port 8765")
+def create_app():
+    application = web.Application()
+    application.router.add_get("/ws", websocket_handler)
+    application.router.add_get(
+        "/", lambda request: web.FileResponse(os.path.join(FRONTEND_DIR, "index.html")))
+    application.router.add_static("/", FRONTEND_DIR, show_index=True)
+    return application
 
 # game sprites
 class Bird:
@@ -433,16 +436,7 @@ def run(config_path):
 
 
 if __name__ == "__main__":
-    web_handler = create_web_handler(
-        FRONTEND_DIR, training_state, state_lock, stop_requested,
-        lambda: training_started_at, start_training,
-        lambda: latest_frame, frame_condition)
-    server = ThreadingHTTPServer(("localhost", 8000), web_handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    threading.Thread(target=start_websocket_server, daemon=True).start()
-    print("Website: http://localhost:8000")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("Server stopped")
-        server.server_close()
+    host = "0.0.0.0"
+    port = int(os.environ.get("PORT", "8000"))
+    print(f"Website and WebSocket service: http://{host}:{port}")
+    web.run_app(create_app(), host=host, port=port)
